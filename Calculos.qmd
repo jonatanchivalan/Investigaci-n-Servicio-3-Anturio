@@ -1,0 +1,94 @@
+# Calculos
+
+```{r}
+# PREPARACIÓN DEL ENTORNO DE TRABAJO
+
+# Instalación y carga de paquetes necesarios
+# Para leer archivos Excel
+if(!require(readxl)) install.packages("readxl")
+# Para visualización y manipulación de datos
+if(!require(tidyverse)) install.packages("ggplot2")     
+# Para analisis de experimentos
+if(!require(AgroR)) install.packages("AgroR")
+# Para exportar archivos en excel 
+if(!require(writexl)) install.packages("writexl")
+
+
+# Importar datos desde el archivo Excel
+datos <- read_excel("datos.xlsx", sheet = 1)
+
+# Estructura del conjunto de datos
+str(datos)
+
+# ANOVA supervivencia
+FAT2DBC(datos$Medio, 
+        datos$Regulador, 
+        datos$Repeticion, 
+        datos$Supervivencia)
+```
+
+Tranformados
+
+```{r}
+# 1. Transformación de la variable
+# Nota: Sumamos 1 por si existen valores de 0, ya que log(0) es indeterminado
+datos$Supervivencia_log <- log(datos$Supervivencia + 1)
+
+# 2. Ejecución del ANOVA con interacción desglosada
+# Usamos FAT2DBC del paquete AgroR
+# Para ver la prueba de Tukey de la interacción, el paquete lo hace 
+# automáticamente si detecta significancia, o puedes explorar los desdoblamientos.
+
+analisis_trans <- FAT2DBC(datos$Medio, 
+                          datos$Regulador, 
+                          datos$Repeticion, 
+                          datos$Supervivencia_log,
+                          mcomp = "tukey")
+
+# 3. Si la interacción NO es significativa (como en tu salida anterior)
+# pero quieres ver las comparaciones de medias de los grupos combinados:
+# Podemos crear una variable combinada para forzar un ANOVA de una vía 
+# y comparar todos contra todos.
+
+datos$Interaccion <- interaction(datos$Medio, datos$Regulador)
+
+# Usando un DBC simple para ver la comparación total
+with(datos, DIC(Interaccion, Supervivencia_log, mcomp = "tukey"))
+```
+
+nn
+
+```{r}
+library(ggplot2)
+
+# Crear el gráfico estético
+ggplot(datos, aes(x = Medio, y = Supervivencia, fill = Regulador)) +
+  # Boxplot con transparencia para ver los puntos detrás
+  geom_boxplot(alpha = 0.7, outlier.shape = NA, color = "#2c3e50") +
+  # Añadir los puntos de los datos reales para identificar variabilidad
+  geom_jitter(position = position_jitterdodge(jitter.width = 0.2), 
+              alpha = 0.5, size = 1.5, color = "#34495e") +
+  # Paleta de colores profesional
+  scale_fill_brewer(palette = "Set2") +
+  # Etiquetas claras
+  labs(title = "Análisis de Supervivencia por Medio y Regulador",
+       subtitle = "Visualización de distribución y dispersión de datos",
+       x = "Medio de Cultivo",
+       y = "Supervivencia (%)",
+       fill = "Regulador") +
+  # Tema minimalista
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    panel.grid.minor = element_blank(),
+    legend.position = "top",
+    axis.text.x = element_text(angle = 0, vjust = 0.5)
+  )
+
+# Ajustamos un modelo lineal estándar para diagnóstico
+modelo <- lm(Supervivencia_log ~ Medio * Regulador + factor(Repeticion), data = datos)
+
+# Graficar diagnósticos
+par(mfrow = c(2, 2))
+plot(modelo)
+```
